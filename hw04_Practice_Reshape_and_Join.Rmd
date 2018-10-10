@@ -1,0 +1,206 @@
+---
+title: "hw04"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction 
+
+The goal of this homework is to solidify data wrangling skills by working some realistic problems in the grey area between data aggregation and data reshaping.
+
+This file is organised by R functions, you could find:
+
+- Data reshaping(Task 1)
+  - [spread](#spread)
+  - [gather](#gather)
+- Joins(Task 2) 
+  - [left_join](#left_join)
+  - [right_join](#right_join)
+  - [inner_join](#inner_join)
+  - [full_join](#full_join)
+  - [semi_join](#semi_join)
+  - [anti_join](#anti_join)
+  - [merge](#merge)
+  - [match](#match)
+
+Let's start with loading the libraries.
+```{r}
+suppressPackageStartupMessages(library(gapminder))
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+
+## Data Reshaping(and relationship to aggregation)
+
+### SPREAD
+> Spread a key-value pair across multiple columns.
+
+This is the activity 2 of the first task:
+
+> Make a tibble with one row per year and columns for life expectancy for two or more countries.
+>
+>   - Use knitr::kable() to make this table look pretty in your rendered homework.
+>
+>   - Take advantage of this new data shape to scatterplot life expectancy for one country against that of another. 
+
+In terms of the description, Canada and Australia are selected and compared here.
+
+```{r}
+df <- gapminder %>% 
+  select(year, country, lifeExp) %>% 
+  filter(country %in% c("Canada", "Australia")) %>%  # filter the data from both Canada and Australia
+  spread(country, lifeExp) # spread the selected countries as columns
+
+knitr::kable(df, caption = 'Life Expectancy by Year', digits = 2)
+```
+
+The new data shape is better for a scatterplot with the life expectancy of two countries since they are in the seperate columns now.
+
+```{r}
+df %>% 
+  ggplot(aes(x = Australia, y = Canada, color = Canada>Australia)) + # colored by comparison
+  geom_point(alpha = 0.8) +
+  geom_text(aes(label=year)) + # show the corresponding years of the points
+  theme_bw() +
+  geom_abline(slope = 1) + # add a reference line
+  ggtitle("Life expectancy of Canada against Australia over time")
+```
+
+To make the comparison clear, I used two diffenent colors and a reference line with the slope equals to 1. We could see that the life expectancy of two countries are very similar and Canada is a bit ahead in the history overall. 
+ 
+### GATHER
+> Gather takes multiple columns and collapses into key-value pairs, duplicating all other columns as needed. 
+
+Use the `df` from the above section to show how `gather` works. 
+```{r}
+df <- gather(df, country, lifeExp, -c(year)) # gather Canada and Australia
+
+knitr::kable(df)
+```
+
+With our new data shape, it's good to show how they spread respectively.
+```{r}
+df %>% 
+  ggplot(aes(x = year, y = lifeExp, color = country)) +
+  geom_point() + 
+  theme_bw() +
+  ggtitle("Life expectancy of Canada against Australia over time")
+  
+```
+
+## Join Prompts (join, merge, look up)
+
+Create two data sources `my_gap` and `df` first. One is part of the `gapminder`, top 3 lifeExp of each continent. The other is consists of continent and hemisphere.
+```{r}
+df <- tibble(
+  continent = c("Asia", "Oceania", "Europe", "Americas", "Antarctica"),
+  hemisphere = c("northern", "southern", "northern", "northern","southern")
+)
+my_gap <- gapminder %>% 
+  group_by(continent) %>% 
+  top_n(3, lifeExp) %>%  
+  select(continent, lifeExp)
+```
+
+Two tables are shown as follow:
+```{r}
+suppressPackageStartupMessages(library(gridExtra))
+grid.arrange(tableGrob(my_gap), tableGrob(df), ncol = 2)
+```
+
+### LEFT_JOIN
+>left_join(x, y): Return all rows from x, and all columns from x and y. If there are multiple matches between x and y, all combination of the matches are returned. This is a mutating join.
+
+```{r}
+knitr::kable(left_join(my_gap, df))
+```
+
+Africa doesn't appear in `df`, so it has an `NA` for `hemisphere`.
+
+### RIGHT_JOIN
+>right_join(x, y): Return all rows from y, and all columns from x and y. If there are multiple matches between x and y, all combination of the matches are returned. This is a mutating join.
+
+```{r}
+knitr::kable(right_join(my_gap, df))
+```
+
+Antarctica doesn't appear in `my_gap`, so it has an `NA` for `lifeExp`.
+
+### INNER_JOIN
+> inner_join(x, y): Return all rows from x where there are matching values in y, and all columns from x and y. If there are multiple matches between x and y, all combination of the matches are returned. This is a mutating join.
+
+```{r}
+knitr::kable(inner_join(my_gap, df))
+```
+
+According to the matching values from two dataframes, both Antarctica and Africa don't appear in the table.
+
+### FULL_JOIN
+> full_join(x, y): Return all rows and all columns from both x and y. Where there are not matching values, returns NA for the one missing. This is a mutating join.
+
+```{r}
+knitr::kable(full_join(my_gap, df))
+```
+
+All continents appear in the table since full_join doesn't match values.
+
+### SEMI_JOIN
+> semi_join(x, y): Return all rows from x where there are matching values in y, keeping just columns from x. A semi join differs from an inner join because an inner join will return one row of x for each matching row of y, where a semi join will never duplicate rows of x. This is a filtering join.
+
+```{r}
+knitr::kable(semi_join(my_gap, df))
+```
+
+The rows of `semi_join` is the same with that of `inner_join`. But there is not "hemisphere" since it just keeps the columns from `my_gap`.
+
+### ANTI_JOIN
+> anti_join(x, y): Return all rows from x where there are not matching values in y, keeping just columns from x. This is a filtering join.
+
+```{r}
+knitr::kable(anti_join(my_gap, df))
+```
+
+It can be considered as`my_gap` deduct the output of `semi_join` above.
+
+### MERGE
+`merge` is a base R function and mainly based on SQL joins. In this section I would compare it with `dplyr` joins.
+
+Both `merge` and `dplyr` joins could implemente different kinds of joins. The main difference between them is the intuitive syntax. As shown above, there are separate functions for each type of join in `dplyr`, whereas `merge` function differentiate them by arguments.
+
+In the following examples, I would show how to make joins with `merge`.
+
+- `left_join`
+```{r}
+knitr::kable(merge(my_gap, df, all.y = TRUE))
+```
+
+- `right_join`
+```{r}
+knitr::kable(merge(my_gap, df, all.y = TRUE))
+```
+
+- `full_join`
+```{r}
+knitr::kable(merge(my_gap, df, all = TRUE))
+```
+
+-`inner_join`
+```{r}
+knitr::kable(merge(my_gap, df))
+```
+
+All the outputs are the same with those of `dplyr` joins except the row order. It's worth mentioning that row order is guaranteed to be preserved in `dylyr` joins.
+
+### MATCH
+
+`Match` returns a vector of the positions of (first) matches of its first argument in its second. It does not perform any data join, but I would make a simple example to show how it works in an indirect way.
+
+```{r}
+pos <- match(df$continent, my_gap$continent) # the vector of the positions in my_gap
+knitr::kable(my_gap[pos,])
+```
+
+From the matched positions, we could find the continents which appear in both `df` and `my_gap`.
